@@ -23,3 +23,6 @@ SYSTEM_OVERVIEW.md
 firebase_options.dart
 google-services.json
 GoogleService-Info.plist
+
+# GEE Key
+gee-key.json

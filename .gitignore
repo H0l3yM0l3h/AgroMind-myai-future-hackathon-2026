@@ -1,0 +1,25 @@
+# === AgroMind Root .gitignore ===
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Environment files (catch-all safety net)
+.env
+.env.*
+!.env.example
+
+# User requested to ignore
+SYSTEM_OVERVIEW.md
+# Firebase configs (keys inside)
+firebase_options.dart
+google-services.json
+GoogleService-Info.plist

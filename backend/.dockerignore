@@ -1,0 +1,29 @@
+# === AgroMind Backend — .dockerignore ===
+# Prevents secrets and dev artifacts from being copied into Docker images.
+
+# Secrets & credentials
+gee-key.json
+*-key.json
+*-credentials.json
+service-account*.json
+credentials.json
+.env
+.env.*
+
+# Python virtual environment
+venv/
+.venv/
+
+# Caches
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Version control & IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Documentation
+*.md

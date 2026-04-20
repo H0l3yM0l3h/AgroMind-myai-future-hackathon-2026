@@ -1,0 +1,72 @@
+# === AgroMind Frontend — Flutter/Firebase .gitignore ===
+
+# ──────────────────────────────────────────────────────────
+# 🔴 SECRETS & ENVIRONMENT
+# ──────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# Firebase config (keys now injected from .env via --dart-define-from-file)
+lib/firebase_options.dart
+**/google-services.json
+**/GoogleService-Info.plist
+
+# ──────────────────────────────────────────────────────────
+# Flutter/Dart/Pub
+# ──────────────────────────────────────────────────────────
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+**/doc/api/
+
+# ──────────────────────────────────────────────────────────
+# IDE & Editor
+# ──────────────────────────────────────────────────────────
+*.iml
+*.ipr
+*.iws
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ──────────────────────────────────────────────────────────
+# Platform Build Artifacts
+# ──────────────────────────────────────────────────────────
+**/ios/Flutter/.last_build_id
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ──────────────────────────────────────────────────────────
+# Symbolication & Obfuscation
+# ──────────────────────────────────────────────────────────
+app.*.symbols
+app.*.map.json
+
+# ──────────────────────────────────────────────────────────
+# OS
+# ──────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ──────────────────────────────────────────────────────────
+# Miscellaneous
+# ──────────────────────────────────────────────────────────
+*.class
+*.log
+*.pyc
+.atom/
+.build/
+.buildlog/
+.history
+.svn/
+.swiftpm/
+migrate_working_dir/
+
+# Flutter generated metadata
+.metadata

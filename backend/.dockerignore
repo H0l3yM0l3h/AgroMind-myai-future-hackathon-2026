@@ -1,29 +1,45 @@
 # === AgroMind Backend — .dockerignore ===
+
 # Prevents secrets and dev artifacts from being copied into Docker images.
 
-# Secrets & credentials
-gee-key.json
-*-key.json
-*-credentials.json
-service-account*.json
-credentials.json
-.env
-.env.*
+
+
+# Secrets & credentials (Commented out for Hackathon Cloud Run Deploy so they actually upload)
+# gee-key.json and .env are intentionally allowed into the image for the hackathon
+# deployment — in production these should be mounted via Secret Manager instead
+
+# gee-key.json
+# *-key.json
+*-credentials.json     
+service-account*.json   
+credentials.json       
+# .env
+# .env.*
+
+
 
 # Python virtual environment
+# The venv is not needed in the container — dependencies are installed via pip
 venv/
 .venv/
 
+
+
 # Caches
+# Compiled Python bytecode and test caches are not needed in the image
 __pycache__/
 *.pyc
 .pytest_cache/
 
+
 # Version control & IDE
+# Git history and IDE config files serve no purpose inside the container
 .git/
 .gitignore
 .idea/
 .vscode/
 
+
 # Documentation
+# Markdown files are not needed at runtime inside the container
 *.md

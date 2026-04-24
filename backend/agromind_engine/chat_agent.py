@@ -6,9 +6,13 @@ agent outputs in the conversation history and answer follow-up questions
 without re-running the full 5-stage analysis.
 """
 
+# LlmAgent is a single LLM-powered agent — no orchestration, no tools,
+# just the model reasoning against the conversation history
 from google.adk.agents.llm_agent import LlmAgent
 
 
+# System prompt that defines the chat agent's behaviour and constraints.
+# Kept as a module-level constant so it can be referenced or tested independently.
 CHAT_AGENT_PROMPT = """You are AgroMind's follow-up assistant. You help farmers 
 understand the agroforestry business plan that was generated for them earlier 
 in this conversation.
@@ -37,10 +41,13 @@ Your rules:
 """
 
 
+# Instantiate the lightweight chat agent.
+# Uses Gemini 2.5 Flash for fast response times (~3-5s vs ~150s for the full pipeline).
+# No tools are registered — this agent only reasons over the existing session history.
 chat_agent = LlmAgent(
     name="AgroMind_Chat_Agent",
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash",  # Flash chosen for low latency on simple Q&A
     description="Answers follow-up questions using the existing conversation context.",
     instruction=CHAT_AGENT_PROMPT,
-    tools=[],
+    tools=[],  # Intentionally empty — chat agent must not call any tools or agents
 )

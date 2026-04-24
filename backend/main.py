@@ -1,4 +1,6 @@
 # main.py
+
+# Standard FastAPI imports for building the REST API
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -8,19 +10,27 @@ import time
 import asyncio
 import os
 import httpx
+
+# Load environment variables from .env file before anything else
 from dotenv import load_dotenv
 
+# Vertex AI AdkApp wraps the ADK agent with session + memory services
 from vertexai.preview.reasoning_engines import AdkApp
+
+# Firestore client for persisting analysis results to the database
 from google.cloud import firestore
 
+# Import the two ADK agents: full pipeline orchestrator and lightweight chat agent
 from agromind_engine import orchestrator_agent, chat_agent
 
 
 # Load environment variables from backend/.env (gitignored)
 load_dotenv()
 
+# Google Maps Geocoding API key — loaded from env, never hardcoded
 GEOCODING_API_KEY = os.environ.get("GEOCODING_API_KEY", "")
 
+# Vertex AI Agent Engine resource ID for session and memory bank binding
 AGENT_ENGINE_ID = "7339574916695457792"
 
 # ---------------------------------------------------------------------------
@@ -28,6 +38,8 @@ AGENT_ENGINE_ID = "7339574916695457792"
 # ---------------------------------------------------------------------------
 app = FastAPI(title="AgroMind — Agroforestry Decision-Support API")
 
+# Allow all origins so the Flutter web/desktop frontend can reach this backend
+# In production, restrict allow_origins to your specific frontend domain
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -39,6 +51,8 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Firestore client (reused across requests)
 # ---------------------------------------------------------------------------
+# Single Firestore client instance shared across all requests to avoid
+# re-initialising the connection on every API call
 db = firestore.Client(project="aura-487117")
 
 # ---------------------------------------------------------------------------
@@ -50,6 +64,9 @@ db = firestore.Client(project="aura-487117")
 # VertexAiMemoryBankService with the correct agent_engine_id. Passing it via
 # env_vars keeps all wiring inside the AdkApp lifecycle.
 # ---------------------------------------------------------------------------
+
+# Main analysis pipeline: runs all 5 agents sequentially (Land Profiler →
+# Agronomist → Parallel(Economist + Plotter) → Documentarian)
 adk_app = AdkApp(
     agent=orchestrator_agent,
     env_vars={"GOOGLE_CLOUD_AGENT_ENGINE_ID": AGENT_ENGINE_ID},
@@ -63,11 +80,14 @@ chat_app = AdkApp(
 # ---------------------------------------------------------------------------
 # API models & endpoints
 # ---------------------------------------------------------------------------
+
+# Represents a single GPS coordinate point (used for farm boundary and planting grid)
 class LatLngPoint(BaseModel):
     latitude: float
     longitude: float
 
 
+# Request body for the /api/chat endpoint (lightweight follow-up questions)
 class ChatRequest(BaseModel):
     session_id: str
     message: str
@@ -81,6 +101,7 @@ class AnalyzeRequest(BaseModel):
     boundary_points: list[LatLngPoint] = []
 
 
+# Request body for the /api/geocode endpoint (place name or address to look up)
 class GeocodeRequest(BaseModel):
     query: str
 
@@ -93,18 +114,22 @@ async def chat_with_orchestrator(request: ChatRequest):
     full_response = ""
 
     async def run_chat():
+        # Stream response chunks from the lightweight chat agent
         nonlocal full_response
         async for chunk in chat_app.async_stream_query(
             message=request.message,
             user_id=request.session_id,
         ):
+            # Extract text parts from each streamed chunk
             content = chunk.get("content", {}) or {}
             parts = content.get("parts", []) or []
             for part in parts:
+                # Only accumulate non-empty text parts
                 if "text" in part and part["text"].strip():
                     full_response += part["text"]
 
     try:
+        # Chat should be fast — enforce a 60s timeout to avoid hanging requests
         await asyncio.wait_for(run_chat(), timeout=60)  # chat should be fast
     except asyncio.TimeoutError:
         print(f"[CHAT] TIMEOUT after 60s", flush=True)
@@ -122,6 +147,7 @@ async def geocode(request: GeocodeRequest):
     Returns Google's raw response shape (status, results, error_message) for
     minimum changes on the Flutter side.
     """
+    # Return an error response if the API key is missing from environment
     if not GEOCODING_API_KEY:
         return {
             "status": "REQUEST_DENIED",
@@ -130,6 +156,7 @@ async def geocode(request: GeocodeRequest):
         }
 
     try:
+        # Make an async HTTP request to the Google Geocoding API
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(
                 "https://maps.googleapis.com/maps/api/geocode/json",
@@ -139,6 +166,7 @@ async def geocode(request: GeocodeRequest):
                     "components": "country:MY",  # restrict to Malaysia
                 },
             )
+            # Pass Google's response directly to the Flutter client unchanged
             return response.json()
     except httpx.TimeoutException:
         return {
@@ -180,6 +208,7 @@ async def analyze_and_persist(request: AnalyzeRequest):
 
     async def run_pipeline():
         nonlocal full_response, planting_grid
+        # Stream events from the full 5-agent SequentialAgent pipeline
         async for chunk in adk_app.async_stream_query(
             user_id=request.session_id,
             message=request.message,
@@ -190,6 +219,7 @@ async def analyze_and_persist(request: AnalyzeRequest):
             parts = content.get("parts", []) or []
 
             for part in parts:
+                # Log every tool call with its arguments for observability
                 if "function_call" in part:
                     fc = part["function_call"]
                     args_str = str(fc.get("args", {}))[:150]
@@ -201,6 +231,7 @@ async def analyze_and_persist(request: AnalyzeRequest):
                     # ADK sometimes wraps tool returns in {"result": ...}, sometimes not.
                     if fr.get("name") == "calculate_planting_grid":
                         resp = fr.get("response", {}) or {}
+                        # Handle both wrapped {"result": ...} and unwrapped response formats
                         candidate = resp.get("result", resp)
                         if isinstance(candidate, dict) and "error" not in candidate:
                             planting_grid = candidate
@@ -212,6 +243,8 @@ async def analyze_and_persist(request: AnalyzeRequest):
                     print(f"[{elapsed:6.1f}s] {author:30s} ← RESP {fr.get('name')}: {resp_preview}", flush=True)
 
                 elif "text" in part:
+                    # Accumulate all text output — the final Documentarian output
+                    # becomes the Markdown business plan returned to the frontend
                     text = part.get("text", "")
                     if text and text.strip():
                         preview = text[:120].replace("\n", " ")
@@ -219,6 +252,7 @@ async def analyze_and_persist(request: AnalyzeRequest):
                         full_response += text
 
     try:
+        # Full pipeline can take up to ~3 minutes — enforce a 300s hard timeout
         await asyncio.wait_for(run_pipeline(), timeout=300)
     except asyncio.TimeoutError:
         print(f"\n[TIMEOUT] Pipeline exceeded 300s — see last agent above", flush=True)
@@ -230,12 +264,14 @@ async def analyze_and_persist(request: AnalyzeRequest):
     report = full_response.strip()
 
     # ── 2. Serialise boundary points for Firestore ────────────────────────
+    # Convert Pydantic LatLngPoint objects to plain dicts for Firestore storage
     boundary_data = [
         {"latitude": pt.latitude, "longitude": pt.longitude}
         for pt in request.boundary_points
     ]
 
     # ── 3. Write results back to the project document ─────────────────────
+    # Always update the report and boundary; only include plantingGrid if generated
     update_data = {
         "reportMarkdown": report,
         "boundaryPoints": boundary_data,
@@ -243,9 +279,11 @@ async def analyze_and_persist(request: AnalyzeRequest):
     if planting_grid:
         update_data["plantingGrid"] = planting_grid
 
+    # Update the specific project document in Firestore using its UUID
     project_ref = db.collection("projects").document(request.project_id)
     project_ref.update(update_data)
 
+    # Return both the Markdown report and the structured planting grid to Flutter
     return {
         "reply": report,
         "plantingGrid": planting_grid,
@@ -253,4 +291,6 @@ async def analyze_and_persist(request: AnalyzeRequest):
 
 
 if __name__ == "__main__":
+    # Entry point for running locally: `python main.py`
+    # For production/Cloud Run, use: `uvicorn main:app --host 0.0.0.0 --port 8080`
     uvicorn.run(app, host="0.0.0.0", port=8000)
